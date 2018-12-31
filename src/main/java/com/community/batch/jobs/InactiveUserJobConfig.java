@@ -78,6 +78,25 @@ public class InactiveUserJobConfig {
      * 청크 단위를 10으로 설정했기 때문에 휴면회원 10가 주어지며,
      * saveAll() 메서드를 사용해서 한번에 DB에 저장한다.
      */
+    /**
+     *  로직 이해: 람다식
+     *  람다식의 형태는 매개변수를 가진 코드 블록이지만, 런타임 시에는 익명 구현 객체를 생성한다.
+     *      람다식 -> 매개변수를 가진 코드 블록 -> 익명 구현 객체
+     *  예를들어, Runnable 인터페이스의 익명 구현 객체를 생성하는 전형적인 코드는 다음과 같다.
+     *      Runnable runnable = new Runnable() {
+     *       public void run() {....}
+     *      };
+     *  위 코드에서 익명 구현 객체를 람다식으로 표현하면 다음과 같다.
+     *  Runnable runnable = () -> {...};
+     *
+     *  어떤 인터페이스를 구현할 것인가는 대입되는 인터페이스가 무엇이냐에 달려있다.
+     *  위 코드는 Runnable 변수에 대입되므로, 람다식은 Runnable의 익명 구현 객체를 생성한다.
+     *
+     *  또한 하나의 매개변수만 있다면 괄호()를 생략할 수 있고,
+     *  중괄호 {}에 하나의 실행문만 있거나 return만 있을 경우 중괄호 {}도 생략할 수 있다.
+     *
+     *  위의 개념을 이해하면, 밑의 구조의 원리를 알 수 있을 것이다.
+     */
     public ItemWriter<User> inactiveUserWriter() {
         return ((List<? extends User> users) -> userRepository.saveAll(users));
     }
