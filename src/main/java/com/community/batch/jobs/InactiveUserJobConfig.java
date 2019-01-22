@@ -12,17 +12,25 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JpaPagingItemReader;
+import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import javax.persistence.EntityManagerFactory;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @AllArgsConstructor
 @Configuration
 public class InactiveUserJobConfig {
 
     private UserRepository userRepository;
+
+    private static final int CHUNK_SIZE = 15;
+    private final EntityManagerFactory entityManagerFactory;
 
     @Bean
     public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inacitveJobStep) {
@@ -32,6 +40,7 @@ public class InactiveUserJobConfig {
                 .build();
     }
 
+    /* 밑에의 기본 1, 기본 2 ItemReader에 해당
     @Bean
     public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory) {
         return stepBuilderFactory.get("inactiveUserStep")
@@ -41,15 +50,27 @@ public class InactiveUserJobConfig {
                 .writer(inactiveUserWriter())
                 .build();
     }
-
-    /**
+    */
+    @Bean
+    public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, JpaPagingItemReader<User> inactiveUserJpaReader) {
+        return stepBuilderFactory.get("inactiveUserStep")
+                .<User, User> chunk(CHUNK_SIZE)
+                .reader(inactiveUserJpaReader)
+                .processor(inactiveUserProcessor())
+                .writer(inactiveUserWriter())
+                .build();
+    }
+    /*
+        start - ItemReader
+     */
+    /** 기본 1
      * @StepScope
      *  기본 빈 생성은 싱글톤이지만, @StepScope를 사용하면 해당 메서드는 Step의 주기에 따라 새로운 빈을 생성한다.
      *  즉, 각 Step의 실행마다 새로 빈을 만들기 때문에 지연 생성이 가능하다.
      *  <주의할 사항은> @StepScope는 기본 프록시 모드가 반환되는 클래스 타입을 참조하기 때문에 @StepScope를 사용하면,
      *  반드시!! 구현된 반환 타입을 명시해 반환해야 한다는 것이다. 예제에서는 반환 타입을 QueueItemReader<User>라고 명시
      *  https://jojoldu.tistory.com/132
-     */
+
     @Bean
     @StepScope
     public QueueItemReader<User> inactiveUserReader() {
@@ -60,6 +81,51 @@ public class InactiveUserJobConfig {
 
         return new QueueItemReader<>(oldUsers);
     }
+     */
+    /**
+     * 기본 2
+     * 모든 데이터를 한번에 가져와 메모리에 올려놓고 read() 메서드로 하나씩 배치 처리작업을 수행한다(QueueItemReader 동일)
+     * 그런데 수백, 수천을 넘어 수십만 개 이상의 데이터를 한번에 가져와 메모리에 올려놓아야 할 때는 어떻게 해야할까?
+     * 이떄는 배체 프로젝트에서 제공하는 PagingItemReader 구현체[대안 1]를 사용할 수 있다
+
+    @Bean
+    @StepScope
+    public ListItemReader<User> inactiveUserReader() {
+        List<User> oldUser =
+                userRepository.findByUpdatedDateAndStatusEquals(LocalDateTime.now().minusYears(1)
+                , UserStatus.ACTIVE);
+        return  new ListItemReader<>(oldUser);
+    }
+     */
+
+    /**
+     * 대안 1
+     * JdbcPagingItemReader, JpaPaingItemReader, HibernatePagingItemReader가 있다.
+     * 현재는 JPA를 사용하고 있으므로 JpaPaingItemReader를 사용한다.
+     *
+     */
+    @Bean(destroyMethod = "")
+    @StepScope
+    public JpaPagingItemReader<User> inactiveUserJpaReader() {
+        JpaPagingItemReader<User> jpaPagingItemReader =
+                new JpaPagingItemReader<>();
+        jpaPagingItemReader.setQueryString("SELECT u FROM user as u WHERE" +
+                " u.updatedDate < :updatedDate and u.status = :status");
+
+        Map<String, Object> map = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+        map.put("updatedDate", now.minusYears(1));
+        map.put("status", UserStatus.ACTIVE);
+
+        jpaPagingItemReader.setParameterValues(map);
+        jpaPagingItemReader.setEntityManagerFactory(entityManagerFactory);
+        jpaPagingItemReader.setPageSize(CHUNK_SIZE);
+
+        return jpaPagingItemReader;
+    }
+    /*
+        end - ItemReader
+     */
 
     // reader에서 읽은 User를 휴면 상태로 전환하는 processor 메서드
     public ItemProcessor<User, User> inactiveUserProcessor() {
