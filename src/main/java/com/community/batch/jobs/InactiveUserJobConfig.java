@@ -108,8 +108,14 @@ public class InactiveUserJobConfig {
     @StepScope
     public JpaPagingItemReader<User> inactiveUserJpaReader() {
         JpaPagingItemReader<User> jpaPagingItemReader =
-                new JpaPagingItemReader<>();
-        jpaPagingItemReader.setQueryString("SELECT u FROM user as u WHERE" +
+                new JpaPagingItemReader() {
+                    // getPage를 retrun 0으로 잡는 이유 : https://jojoldu.tistory.com/337
+                    @Override
+                    public int getPage() {
+                        return 0;
+                    }
+                };
+        jpaPagingItemReader.setQueryString("SELECT u FROM User as u WHERE" +
                 " u.updatedDate < :updatedDate and u.status = :status");
 
         Map<String, Object> map = new HashMap<>();
@@ -118,7 +124,7 @@ public class InactiveUserJobConfig {
         map.put("status", UserStatus.ACTIVE);
 
         jpaPagingItemReader.setParameterValues(map);
-        jpaPagingItemReader.setEntityManagerFactory(entityManagerFactory);
+        jpaPagingItemReader.setEntityManagerFactory(entityManagerFactory); // 트랜잭션을 관리해줌
         jpaPagingItemReader.setPageSize(CHUNK_SIZE);
 
         return jpaPagingItemReader;
