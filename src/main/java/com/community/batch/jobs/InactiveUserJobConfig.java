@@ -12,6 +12,7 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.context.annotation.Bean;
@@ -54,7 +55,7 @@ public class InactiveUserJobConfig {
     @Bean
     public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, JpaPagingItemReader<User> inactiveUserJpaReader) {
         return stepBuilderFactory.get("inactiveUserStep")
-                .<User, User> chunk(CHUNK_SIZE)
+                .<User, User>chunk(CHUNK_SIZE)
                 .reader(inactiveUserJpaReader)
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
@@ -71,16 +72,15 @@ public class InactiveUserJobConfig {
      *  반드시!! 구현된 반환 타입을 명시해 반환해야 한다는 것이다. 예제에서는 반환 타입을 QueueItemReader<User>라고 명시
      *  https://jojoldu.tistory.com/132
 
-    @Bean
-    @StepScope
-    public QueueItemReader<User> inactiveUserReader() {
-        List<User> oldUsers =
-                userRepository.findByUpdatedDateAndStatusEquals(
-                        LocalDateTime.now().minusYears(1), UserStatus.ACTIVE
-                );
+     @Bean
+     @StepScope public QueueItemReader<User> inactiveUserReader() {
+     List<User> oldUsers =
+     userRepository.findByUpdatedDateAndStatusEquals(
+     LocalDateTime.now().minusYears(1), UserStatus.ACTIVE
+     );
 
-        return new QueueItemReader<>(oldUsers);
-    }
+     return new QueueItemReader<>(oldUsers);
+     }
      */
     /**
      * 기본 2
@@ -88,21 +88,19 @@ public class InactiveUserJobConfig {
      * 그런데 수백, 수천을 넘어 수십만 개 이상의 데이터를 한번에 가져와 메모리에 올려놓아야 할 때는 어떻게 해야할까?
      * 이떄는 배체 프로젝트에서 제공하는 PagingItemReader 구현체[대안 1]를 사용할 수 있다
 
-    @Bean
-    @StepScope
-    public ListItemReader<User> inactiveUserReader() {
-        List<User> oldUser =
-                userRepository.findByUpdatedDateAndStatusEquals(LocalDateTime.now().minusYears(1)
-                , UserStatus.ACTIVE);
-        return  new ListItemReader<>(oldUser);
-    }
+     @Bean
+     @StepScope public ListItemReader<User> inactiveUserReader() {
+     List<User> oldUser =
+     userRepository.findByUpdatedDateAndStatusEquals(LocalDateTime.now().minusYears(1)
+     , UserStatus.ACTIVE);
+     return  new ListItemReader<>(oldUser);
+     }
      */
 
     /**
      * 대안 1
      * JdbcPagingItemReader, JpaPaingItemReader, HibernatePagingItemReader가 있다.
      * 현재는 JPA를 사용하고 있으므로 JpaPaingItemReader를 사용한다.
-     *
      */
     @Bean(destroyMethod = "")
     @StepScope
@@ -115,6 +113,7 @@ public class InactiveUserJobConfig {
                         return 0;
                     }
                 };
+        // 아쉽게도 쿼리를 짜서 실행하는 방법밖에는 없다.
         jpaPagingItemReader.setQueryString("SELECT u FROM User as u WHERE" +
                 " u.updatedDate < :updatedDate and u.status = :status");
 
@@ -145,7 +144,7 @@ public class InactiveUserJobConfig {
         };
     }
 
-    /**
+    /** 기본 1
      * 리스트 타입을 앞서 설정한 청크 단위로 받는다.
      * 청크 단위를 10으로 설정했기 때문에 휴면회원 10가 주어지며,
      * saveAll() 메서드를 사용해서 한번에 DB에 저장한다.
@@ -168,8 +167,25 @@ public class InactiveUserJobConfig {
      *  중괄호 {}에 하나의 실행문만 있거나 return만 있을 경우 중괄호 {}도 생략할 수 있다.
      *
      *  위의 개념을 이해하면, 밑의 구조의 원리를 알 수 있을 것이다.
+
+     public ItemWriter<User> inactiveUserWriter() {
+     return ((List<? extends User> users) -> userRepository.saveAll(users));
+     }
      */
-    public ItemWriter<User> inactiveUserWriter() {
-        return ((List<? extends User> users) -> userRepository.saveAll(users));
+
+    /**
+     * 대안 1
+     * ItemWriter도 ItemReader와 마찬가지로 상황에 맞는 여러 구현 클래스를 제공한다.
+     * JPA를 사용하고 있으므로, JpaItemWriter
+     */
+    private JpaItemWriter<User> inactiveUserWriter() {
+        /*
+            별도로 저장 설정을 할 필요없이 제네릭에 저장할 타입을 명시하고
+            EntityManagerFactory만 설정하면 Processor에서 넘어온 데이터를 청크 단위로 저장
+         */
+        JpaItemWriter<User> writer = new JpaItemWriter<>();
+        writer.setEntityManagerFactory(entityManagerFactory);
+
+        return writer;
     }
 }
