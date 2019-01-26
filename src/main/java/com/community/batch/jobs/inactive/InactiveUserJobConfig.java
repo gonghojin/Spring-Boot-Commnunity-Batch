@@ -3,6 +3,7 @@ package com.community.batch.jobs.inactive;
 import com.community.batch.domain.User;
 import com.community.batch.domain.enums.UserStatus;
 import com.community.batch.jobs.inactive.listener.InactiveJobListener;
+import com.community.batch.jobs.inactive.listener.InactiveStepListener;
 import com.community.batch.jobs.readers.QueueItemReader;
 import com.community.batch.repository.UserRepository;
 import lombok.AllArgsConstructor;
@@ -72,12 +73,13 @@ public class InactiveUserJobConfig {
 
     // JobExecution 보완 1 - 1
     @Bean
-    public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, ListItemReader<User> inactiveUserReader) {
+    public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, ListItemReader<User> inactiveUserReader, InactiveStepListener inactiveStepListener) {
         return stepBuilderFactory.get("inactiveUserStep")
                 .<User, User> chunk(CHUNK_SIZE)
                 .reader(inactiveUserReader)
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
+                .listener(inactiveStepListener)
                 .build();
     }
 
