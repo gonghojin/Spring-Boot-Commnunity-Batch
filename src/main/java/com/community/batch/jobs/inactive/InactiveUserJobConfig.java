@@ -1,7 +1,8 @@
-package com.community.batch.jobs;
+package com.community.batch.jobs.inactive;
 
 import com.community.batch.domain.User;
 import com.community.batch.domain.enums.UserStatus;
+import com.community.batch.jobs.inactive.listener.InactiveJobListener;
 import com.community.batch.jobs.readers.QueueItemReader;
 import com.community.batch.repository.UserRepository;
 import lombok.AllArgsConstructor;
@@ -37,9 +38,10 @@ public class InactiveUserJobConfig {
     private final EntityManagerFactory entityManagerFactory;
 
     @Bean
-    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inacitveJobStep) {
+    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inacitveJobStep, InactiveJobListener inactiveJobListener) {
         return jobBuilderFactory.get("inactiveUserJob")
                 .preventRestart()
+                .listener(inactiveJobListener) // 선택적
                 .start(inacitveJobStep)
                 .build();
     }
@@ -93,7 +95,7 @@ public class InactiveUserJobConfig {
      @Bean
      @StepScope public QueueItemReader<User> inactiveUserReader() {
      List<User> oldUsers =
-     userRepository.findByUpdatedDateAndStatusEquals(
+     userRepository.findByUpdatedDateBeforeAndStatusEquals(
      LocalDateTime.now().minusYears(1), UserStatus.ACTIVE
      );
 
@@ -109,7 +111,7 @@ public class InactiveUserJobConfig {
      @Bean
      @StepScope public ListItemReader<User> inactiveUserReader() {
      List<User> oldUser =
-     userRepository.findByUpdatedDateAndStatusEquals(LocalDateTime.now().minusYears(1)
+     userRepository.findByUpdatedDateBeforeAndStatusEquals(LocalDateTime.now().minusYears(1)
      , UserStatus.ACTIVE);
      return  new ListItemReader<>(oldUser);
      }
@@ -154,7 +156,7 @@ public class InactiveUserJobConfig {
                                                    UserRepository userRepository                     // Date 타입의 nowDate 파라미터를 전달받음
                                                     ) {
         LocalDateTime now = LocalDateTime.ofInstant(nowDate.toInstant(), ZoneId.systemDefault());
-        List<User> inactiveUsers = userRepository.findByUpdatedDateAndStatusEquals(now.minusYears(1), UserStatus.ACTIVE);
+        List<User> inactiveUsers = userRepository.findByUpdatedDateBeforeAndStatusEquals(now.minusYears(1), UserStatus.ACTIVE);
 
         return new ListItemReader<>(inactiveUsers);
     }
