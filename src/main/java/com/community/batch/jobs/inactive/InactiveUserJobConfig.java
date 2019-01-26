@@ -12,6 +12,9 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.core.job.builder.FlowBuilder;
+import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.job.flow.FlowExecutionStatus;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JpaItemWriter;
@@ -39,12 +42,28 @@ public class InactiveUserJobConfig {
     private final EntityManagerFactory entityManagerFactory;
 
     @Bean
-    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inacitveJobStep, InactiveJobListener inactiveJobListener) {
+    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, /*Step inacitveJobStep,*/ InactiveJobListener inactiveJobListener, Flow inactiveJobFlow) {
         return jobBuilderFactory.get("inactiveUserJob")
                 .preventRestart()
                 .listener(inactiveJobListener) // 선택적
-                .start(inacitveJobStep)
+                /*. Flow 추가해보기
+                start(inacitveJobStep)
+                */
+                .start(inactiveJobFlow)
+                .end()
                 .build();
+    }
+    /*
+        Add : Flow
+     */
+    @Bean
+    public Flow inactiveJobFlow(Step inactiveJobStep) {
+        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow"); // 원하는 이름 넣기
+
+        return flowBuilder
+                .start(new InactiveJobExecutionDecider())
+                .on(FlowExecutionStatus.FAILED.getName()).end()
+                .on(FlowExecutionStatus.COMPLETED.getName()).to(inactiveJobStep).end();
     }
 
     /* 밑에의 기본 1, 기본 2 ItemReader에 해당
